@@ -1,0 +1,24 @@
+{
+    "name": "digistorm/omnipay-eghl",
+    "type": "library",
+    "description": "eGHL (server-to-server) driver for the Omnipay payment processing library",
+    "keywords": [
+        "gateway",
+        "eghl",
+        "merchant",
+        "omnipay",
+        "pay",
+        "payment"
+    ],
+    "license": "MIT",
+    "autoload": {
+        "psr-4": { "Omnipay\\Eghl\\" : "src/" }
+    },
+    "require": {
+        "omnipay/common": "^3"
+    },
+    "require-dev": {
+        "omnipay/tests": "^3"
+    },
+    "prefer-stable": true
+}
