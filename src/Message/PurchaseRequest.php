@@ -11,6 +11,7 @@ class PurchaseRequest extends AbstractRequest
     {
         $this->validate('transactionId', 'amount', 'currency');
 
+        // TODO add more checks
         if (!$this->getParameter('card')) {
             throw new InvalidRequestException('You must pass a "card" parameter.');
         }
@@ -18,8 +19,9 @@ class PurchaseRequest extends AbstractRequest
         /* @var $card \OmniPay\Common\CreditCard */
         $card = $this->getParameter('card');
         $card->validate();
-
         $charge = $this->getParameter('amount');
+        $customer = $this->getCustomer();
+        $metadata = $this->getMetadata();
 
         $data = [
             // Generic Details
@@ -29,24 +31,27 @@ class PurchaseRequest extends AbstractRequest
             'MerchantReturnURL' => 's2s',
 
             // Transaction Details
-            'PaymentID' => 'ds' . time(), // TODO Replace
-            'PaymentDesc' => 'TestOrder', // TODO Replace
-            'OrderNumber' => 'dso' . time(), // TODO Replace
+            'PaymentID' => $this->getTransactionId(),
+            'PaymentDesc' => 'Payment for entry ' . $metadata['entry_uuid'],
+            'OrderNumber' => $metadata['entry_uuid'],
             'Amount' => $charge->getAmount() / 100,
             'CurrencyCode' => $charge->getCurrency()->getCode(),
-
+            
             // Card Details
             'CardNo' => $card->getNumber(),
             'CardHolder' => $card->getName(),
             'CardExp' => $card->getExpiryDate('Ym'),
             'CardCVV2' => $card->getCvv(),
-
+            
             // Customer Details
-            'BillAddr' => '-', // TODO get customer details
-            'BillPostal' => '-',
-            'BillCity' => '-',
-            'BillRegion' => '-',
-            'BillCountry' => '-',
+            'CustName' => $customer['first_name'] . ' ' . $customer['last_name'],
+            'CustEmail' => $customer['email'],
+            'CustPhone' => $customer['phone'],
+            'BillAddr' => $customer['address']['line_1'],
+            'BillPostal' => $customer['address']['postal_code'],
+            'BillCity' => $customer['address']['locality'],
+            'BillRegion' => $customer['address']['administrative_area'],
+            'BillCountry' => $customer['address']['country_code'],
         ];
 
         return $data;
