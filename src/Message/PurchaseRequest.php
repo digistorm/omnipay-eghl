@@ -44,7 +44,7 @@ class PurchaseRequest extends AbstractRequest
             'CardCVV2' => $card->getCvv(),
             
             // Customer Details
-            'CustName' => $customer['first_name'] . ' ' . $customer['last_name'],
+            'CustName' => $customer['firstName'] . ' ' . $customer['lastName'],
             'CustEmail' => $customer['email'],
             'CustPhone' => $customer['phone'],
             'BillAddr' => $customer['address']['line_1'],
