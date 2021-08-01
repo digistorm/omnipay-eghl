@@ -85,6 +85,16 @@ abstract class AbstractRequest extends \Omnipay\Common\Message\AbstractRequest
         return $this->getParameter('metadata');
     }
 
+    public function setOrderId($value)
+    {
+        return $this->setParameter('orderId', $value);
+    }
+
+    public function getOrderId()
+    {
+        return $this->getParameter('orderId');
+    }
+
     abstract protected function createResponse($data);
 
     /**
@@ -99,21 +109,110 @@ abstract class AbstractRequest extends \Omnipay\Common\Message\AbstractRequest
         return 'POST';
     }
 
+    public function getHeaders()
+    {
+        return ['Content-Type' => 'application/x-www-form-urlencoded'];
+    }
+
     /**
      * {@inheritdoc}
      */
     public function sendData($data)
     {
-        // Make request to eGHL
-        $headers = [
-            'Content-Type' => 'application/x-www-form-urlencoded'
-        ];
+        // Make request to eGHL eg (https://pay.e-ghl.com/ipgsg/payment.aspx)
         $data['HashValue'] = $this->generateHash($data);
-        $httpResponse = $this->httpClient->request($this->getHttpMethod(), $this->getEndpointBase(), $headers, http_build_query($data));
-        
-        // Parse response as query params
-        parse_str(trim($httpResponse->getBody()->getContents()), $result);
-        return $this->createResponse($result);
+        $firstResponse = $this->httpClient->request(
+            $this->getHttpMethod(),
+            $this->getEndpointBase(),
+            $this->getHeaders(),
+            http_build_query($data)
+        );
+        $firstParsed = $this->parseResponse($firstResponse);
+
+        // Follow Response
+        $secondResponse = $this->httpClient->request(
+            $this->getHttpMethod(),
+            $firstParsed['action'],
+            $this->getHeaders(),
+            http_build_query($firstParsed['inputs'])
+        );
+        $secondParsed = $this->parseResponse($secondResponse);
+
+        // Follow Response
+        $thirdResponse = $this->httpClient->request(
+            $this->getHttpMethod(),
+            $secondParsed['action'],
+            $this->getHeaders(),
+            http_build_query($secondParsed['inputs'])
+        );
+        $thirdParsed = $this->parseResponse($thirdResponse);
+        $this->validateResponse($thirdParsed['inputs']);
+
+        return $this->createResponse($thirdParsed['inputs']);
+    }
+
+    public function parseResponse($httpResponse)
+    {
+        $html = $httpResponse->getBody()->getContents();
+        $formExists = preg_match('/<form name=\'frmProcessPayment\' action=\'([^\']*)\' method=\'POST\'>.*<\/form>/s', $html, $matches);
+        if (!$formExists) {
+            // TODO throw error
+        }
+        $form = $matches[0];
+        $action = $matches[1];
+        $inputsExist = preg_match_all('/<INPUT type=\'hidden\' name=\'([^\']*)\' value=\'([^\']*)\'>/', $form, $matches, PREG_SET_ORDER);
+        if (!$inputsExist) {
+            // TODO throw error
+        }
+        $inputs = [];
+        foreach ($matches as $match) {
+            // name => value
+            $inputs[$match[1]] = $match[2];
+        }
+        return [
+            'action' => $action,
+            'inputs' => $inputs,
+        ];
+    }
+    
+    public function validateResponse($inputs)
+    {
+        // Confirm hash values
+        $hashAttributes = [
+            'HashValue' => [
+                'TxnID',
+                'ServiceID',
+                'PaymentID',
+                'TxnStatus',
+                'Amount',
+                'CurrencyCode',
+                'AuthCode',
+            ],
+            'HashValue2' => [
+                'TxnID',
+                'ServiceID',
+                'PaymentID',
+                'TxnStatus',
+                'Amount',
+                'CurrencyCode',
+                'AuthCode', 
+                'OrderNumber',
+                'Param6',
+                'Param7',
+            ]
+        ];
+        $hashKeys = [];
+        foreach ($hashAttributes as $hashType => $attributes) {
+            $hashKeys[$hashType] = $this->getPassword();
+            foreach ($attributes as $attr) {
+                if (isset($inputs[$attr])) {
+                    $hashKeys[$hashType] .= $inputs[$attr];
+                }
+            }
+            if ($inputs[$hashType] !== hash('sha256', $hashKeys[$hashType])) {
+                throw new \Exception('Unable to verify ' . $hashType . ' from server');
+            }
+        }
     }
 
     /**
@@ -161,7 +260,7 @@ abstract class AbstractRequest extends \Omnipay\Common\Message\AbstractRequest
 
         if ($amount !== null) {
             $moneyParser = new DecimalMoneyParser($this->getCurrencies());
-            $currencyCode = $this->getCurrency() ?: 'USD';
+            $currencyCode = $this->getCurrency() ?: 'MYR';
             $currency = new Currency($currencyCode);
 
             $number = Number::fromString($amount);
@@ -200,5 +299,23 @@ abstract class AbstractRequest extends \Omnipay\Common\Message\AbstractRequest
     protected function filter($string, $maxLength = 50)
     {
         return substr(preg_replace('/[^a-zA-Z0-9 \-]/', '', $string), 0, $maxLength);
+    }
+
+    private function hexToBase62($hex) {
+        $number = base_convert($hex, 16, 10);
+        $base = 62;
+        $charset = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        $remainder = bcmod($number, $base);
+        $result = $charset[$remainder];
+        $quotient = bcdiv($number, $base, 0);
+        while ($quotient) {
+            $remainder = bcmod($quotient, $base);
+            $quotient = bcdiv($quotient, $base, 0);
+            $result = $charset[$remainder] . $result;
+        }
+        return $result;
+
+        // e30711af61b74de983ba0b5663a9123
+        // qM1Tr0h83899ejeZrSJL8
     }
 }

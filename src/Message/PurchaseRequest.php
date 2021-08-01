@@ -22,6 +22,10 @@ class PurchaseRequest extends AbstractRequest
         $charge = $this->getParameter('amount');
         $customer = $this->getCustomer();
         $metadata = $this->getMetadata();
+        $address = $customer['address'];
+        if (isset($customer['address']['_other'])) {
+            $address = $customer['address']['_other'];
+        }
 
         $data = [
             // Generic Details
@@ -33,25 +37,25 @@ class PurchaseRequest extends AbstractRequest
             // Transaction Details
             'PaymentID' => $this->getTransactionId(),
             'PaymentDesc' => 'Payment for entry ' . $metadata['entry_uuid'],
-            'OrderNumber' => $metadata['entry_uuid'],
-            'Amount' => $charge->getAmount() / 100,
+            'OrderNumber' => $this->getOrderId(),
+            'Amount' => number_format($charge->getAmount() / 100, 2),
             'CurrencyCode' => $charge->getCurrency()->getCode(),
-            
+
             // Card Details
             'CardNo' => $card->getNumber(),
             'CardHolder' => $card->getName(),
             'CardExp' => $card->getExpiryDate('Ym'),
             'CardCVV2' => $card->getCvv(),
-            
+
             // Customer Details
             'CustName' => $customer['firstName'] . ' ' . $customer['lastName'],
             'CustEmail' => $customer['email'],
             'CustPhone' => $customer['phone'],
-            'BillAddr' => $customer['address']['line_1'],
-            'BillPostal' => $customer['address']['postal_code'],
-            'BillCity' => $customer['address']['locality'],
-            'BillRegion' => $customer['address']['administrative_area'],
-            'BillCountry' => $customer['address']['country_code'],
+            'BillAddr' => $address['line_1'],
+            'BillPostal' => $address['postal_code'],
+            'BillCity' => $address['locality'],
+            'BillRegion' => $address['administrative_area'],
+            'BillCountry' => $address['country_code'],
         ];
 
         return $data;
